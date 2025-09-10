@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Dark Mode Toggle",
+  "version": "1.0",
+  "description": "Applies a soft dark mode to the current page.",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "Toggle Dark Mode"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
