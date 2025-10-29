@@ -25,3 +25,7 @@ To install this extension locally for testing and development, follow these step
     The "Dark Mode Toggle" extension should now be loaded into Chrome and will appear in your extensions list. You can see its icon in the Chrome toolbar. You can now test it on any website.
 
 To see changes you make to the code, you'll need to go back to the `chrome://extensions` page and click the "reload" icon for your extension.
+
+## Privacy Policy
+
+See the privacy policy here: [PRIVACY.md](./PRIVACY.md)
