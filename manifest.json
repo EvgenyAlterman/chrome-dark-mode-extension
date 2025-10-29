@@ -3,17 +3,36 @@
   "name": "Dark Mode Toggle",
   "version": "1.0",
   "description": "Applies a soft dark mode to the current page.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
   "action": {
-    "default_title": "Toggle Dark Mode"
+    "default_title": "Toggle Dark Mode",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
   },
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["init.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "init.js"
+      ],
       "run_at": "document_start"
     }
   ]
