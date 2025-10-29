@@ -30,7 +30,7 @@ This extension does not target or knowingly collect information from children.
 If we change this policy, we will update the date above and include the updated policy in this repository.
 
 ### Contact
-For privacy questions or requests, contact: <your-email@example.com>
+For privacy questions or requests, contact: <sworgkh.bot@gmail.com>
 
 ### Compliance reference
 This policy addresses the requirements in Chrome Web Store program policies: [Privacy Policies — Chrome Web Store Program Policies](https://developer.chrome.com/docs/webstore/program-policies/privacy/).
