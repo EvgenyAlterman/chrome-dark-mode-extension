@@ -11,38 +11,102 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
 
-# --- PNG generation (solid color) ---
-def write_solid_png(path: Path, size: int, r: int, g: int, b: int, a: int = 255) -> None:
-  path.parent.mkdir(parents=True, exist_ok=True)
-  width = height = size
-  # Build raw RGBA image with filter byte 0 per scanline
-  row = bytes([0]) + bytes([r, g, b, a]) * width
-  raw = row * height
+# --- PNG generation (rounded icon with letter 'D') ---
+def _png_chunk(tag: bytes, data: bytes) -> bytes:
+  return struct.pack(
+    ">I", len(data)
+  ) + tag + data + struct.pack(
+    ">I", (binascii.crc32(tag + data) & 0xFFFFFFFF)
+  )
 
-  def chunk(tag: bytes, data: bytes) -> bytes:
-    return struct.pack(
-      ">I", len(data)
-    ) + tag + data + struct.pack(
-      ">I", (binascii.crc32(tag + data) & 0xFFFFFFFF)
-    )
+
+def _new_raw_rgba(size: int) -> bytearray:
+  # Each row starts with PNG filter byte 0
+  return bytearray((1 + 4 * size) * size)
+
+
+def _set_px(raw: bytearray, size: int, x: int, y: int, r: int, g: int, b: int, a: int = 255) -> None:
+  if x < 0 or y < 0 or x >= size or y >= size:
+    return
+  row_start = y * (1 + 4 * size)
+  raw[row_start] = 0  # filter type 0 per row
+  i = row_start + 1 + 4 * x
+  raw[i + 0] = r
+  raw[i + 1] = g
+  raw[i + 2] = b
+  raw[i + 3] = a
+
+
+def _draw_rounded_rect(raw: bytearray, size: int, radius: int, r: int, g: int, b: int, a: int = 255) -> None:
+  s = size
+  rad2 = radius * radius
+  for y in range(s):
+    for x in range(s):
+      in_core = (radius <= x < s - radius) or (radius <= y < s - radius)
+      if in_core:
+        _set_px(raw, s, x, y, r, g, b, a)
+        continue
+      # corners
+      cx = radius if x < radius else (s - 1 - radius)
+      cy = radius if y < radius else (s - 1 - radius)
+      dx = x - cx
+      dy = y - cy
+      if dx * dx + dy * dy <= rad2:
+        _set_px(raw, s, x, y, r, g, b, a)
+
+
+def _draw_letter_d(raw: bytearray, size: int, fg: tuple[int, int, int, int]) -> None:
+  r, g, b, a = fg
+  s = size
+  # Proportions tuned for small sizes too
+  margin = max(1, int(round(0.18 * s)))
+  bar = max(1, int(round(0.22 * s)))
+  top = margin
+  bottom = s - margin - 1
+  cy = (top + bottom) / 2.0
+  radius = (bottom - top + 1) / 2.0
+  cx = margin + bar  # center of semicircle
+
+  for y in range(top, bottom + 1):
+    for x in range(margin, s - margin):
+      # Left vertical bar
+      if x <= margin + bar:
+        _set_px(raw, s, x, y, r, g, b, a)
+        continue
+      # Right half-disk
+      dx = x - cx
+      dy = y - cy
+      if dx >= 0 and (dx * dx + dy * dy) <= radius * radius:
+        _set_px(raw, s, x, y, r, g, b, a)
+
+
+def write_logo_png(path: Path, size: int, bg_rgb: tuple[int, int, int], fg_rgb: tuple[int, int, int], corner_frac: float = 0.23) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  s = size
+  raw = _new_raw_rgba(s)
+  radius = max(1, int(round(s * corner_frac)))
+  # Background rounded rectangle
+  _draw_rounded_rect(raw, s, radius, bg_rgb[0], bg_rgb[1], bg_rgb[2], 255)
+  # Letter 'D' overlay
+  _draw_letter_d(raw, s, (fg_rgb[0], fg_rgb[1], fg_rgb[2], 255))
 
   png_sig = b"\x89PNG\r\n\x1a\n"
   ihdr = struct.pack(
     ">IIBBBBB",
-    width,
-    height,
+    s,
+    s,
     8,   # bit depth
     6,   # color type RGBA
     0,   # compression
     0,   # filter
     0,   # interlace
   )
-  idat = zlib.compress(raw)
+  idat = zlib.compress(bytes(raw))
   with open(path, "wb") as f:
     f.write(png_sig)
-    f.write(chunk(b"IHDR", ihdr))
-    f.write(chunk(b"IDAT", idat))
-    f.write(chunk(b"IEND", b""))
+    f.write(_png_chunk(b"IHDR", ihdr))
+    f.write(_png_chunk(b"IDAT", idat))
+    f.write(_png_chunk(b"IEND", b""))
 
 
 # --- Helpers ---
@@ -65,13 +129,14 @@ def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
   return int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16)
 
 
-def ensure_icons(root: Path, color_hex: str = "#1e90ff") -> None:
-  r, g, b = hex_to_rgb(color_hex)
+def ensure_icons(root: Path, bg_hex: str = "#1e90ff", fg_hex: str = "#ffffff", overwrite: bool = True) -> None:
+  br, bg, bb = hex_to_rgb(bg_hex)
+  fr, fg, fb = hex_to_rgb(fg_hex)
   sizes = [16, 32, 48, 128]
   for s in sizes:
     out = root / "icons" / f"icon{s}.png"
-    if not out.exists():
-      write_solid_png(out, s, r, g, b, 255)
+    if overwrite or not out.exists():
+      write_logo_png(out, s, (br, bg, bb), (fr, fg, fb))
 
 
 def ensure_manifest_icons(manifest: dict) -> dict:
@@ -143,15 +208,17 @@ def build_zip(root: Path, out_dir: Path, zip_name: str) -> Path:
 def main():
   parser = argparse.ArgumentParser(description="Prepare Chrome extension release: generate icons, ensure manifest, create ZIP")
   parser.add_argument("--bump", choices=["patch", "minor", "major"], help="Bump manifest version before packaging")
-  parser.add_argument("--icon-color", default="#1e90ff", help="Hex color for generated icons (default: #1e90ff)")
+  parser.add_argument("--bg-color", default="#1e90ff", help="Background hex color for icons (default: #1e90ff)")
+  parser.add_argument("--fg-color", default="#ffffff", help="Letter color for icons (default: #ffffff)")
+  parser.add_argument("--no-overwrite", action="store_true", help="Do not overwrite existing icons")
   parser.add_argument("--out-dir", default="dist", help="Output directory for the ZIP (default: dist)")
   args = parser.parse_args()
 
   root = Path(__file__).resolve().parent
   manifest = load_manifest(root)
 
-  # Generate icons
-  ensure_icons(root, args.icon_color)
+  # Generate icons (rounded with 'D')
+  ensure_icons(root, args.bg_color, args.fg_color, overwrite=(not args.no_overwrite))
 
   # Ensure manifest has icons/default_icon
   manifest = ensure_manifest_icons(manifest)
@@ -174,7 +241,7 @@ def main():
   print("Prepared release:")
   print(f"  name:       {name}")
   print(f"  version:    {version}")
-  print(f"  icons:      icons/icon16.png, icon32.png, icon48.png, icon128.png")
+  print(f"  icons:      icons/icon16.png, icon32.png, icon48.png, icon128.png (rounded, 'D')")
   print(f"  output:     {out_zip}")
 
 
